@@ -1,0 +1,146 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Network {
+  DEVNET
+  MAINNET
+}
+
+enum PoolStatus {
+  PENDING
+  ACTIVE
+  FAILED
+  WITHDRAWN
+}
+
+enum BotStatus {
+  IDLE
+  RUNNING
+  PAUSED
+  STOPPED
+}
+
+enum TradeType {
+  BUY
+  SELL
+}
+
+model Token {
+  id              String         @id @default(uuid())
+  network         Network        @default(DEVNET)
+  mintAddress     String         @unique
+  name            String
+  symbol          String
+  description     String?
+  imageUrl        String?
+  decimals        Int            @default(9)
+  supply          BigInt
+  freezeRevoked   Boolean        @default(true)
+  mintRevoked     Boolean        @default(true)
+  updateRevoked   Boolean        @default(false)
+  creatorWallet   String
+  metadataUri     String?
+  mintTxSignature String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  liquidityPools  LiquidityPool[]
+  botConfigs      BotConfig[]
+
+  @@index([creatorWallet])
+  @@index([network])
+}
+
+model LiquidityPool {
+  id              String      @id @default(uuid())
+  tokenId         String
+  token           Token       @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  network         Network     @default(DEVNET)
+  poolAddress     String      @unique
+  lpMintAddress   String?
+  baseTokenAmount BigInt
+  solAmount       Float
+  status          PoolStatus  @default(ACTIVE)
+  poolTxSignature String?
+  createdAt       DateTime    @default(now())
+  botConfigs      BotConfig[]
+
+  @@index([poolAddress])
+}
+
+model BotConfig {
+  id                    String      @id @default(uuid())
+  tokenId               String
+  token                 Token       @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  poolId                String?
+  pool                  LiquidityPool? @relation(fields: [poolId], references: [id], onDelete: SetNull)
+  network               Network     @default(DEVNET)
+  status                BotStatus   @default(IDLE)
+  creatorWallet         String
+  targetPoolAddress     String?
+  depositSolAmount      Float       @default(0.5)
+  minTradeSol           Float       @default(0.01)
+  maxTradeSol           Float       @default(0.05)
+  minIntervalSec        Int         @default(10)
+  maxIntervalSec        Int         @default(30)
+  buyRatioPercent       Int         @default(65) // 65% buy, 35% sell creates bullish activity
+  totalVolumeSol        Float       @default(0.0)
+  totalTradesExecuted   Int         @default(0)
+  lastTradeAt           DateTime?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  wallets               BotWallet[]
+  trades                BotTrade[]
+
+  @@index([tokenId])
+  @@index([creatorWallet])
+  @@index([status])
+}
+
+model BotWallet {
+  id              String      @id @default(uuid())
+  botConfigId     String
+  botConfig       BotConfig   @relation(fields: [botConfigId], references: [id], onDelete: Cascade)
+  publicKey       String
+  privateKeyEnc   String      // Base58 encoded secret key for local automation
+  solBalance      Float       @default(0.0)
+  tokenBalance    Float       @default(0.0)
+  totalTrades     Int         @default(0)
+  createdAt       DateTime    @default(now())
+  trades          BotTrade[]
+
+  @@index([botConfigId])
+  @@index([publicKey])
+}
+
+model BotTrade {
+  id              String      @id @default(uuid())
+  botConfigId     String
+  botConfig       BotConfig   @relation(fields: [botConfigId], references: [id], onDelete: Cascade)
+  botWalletId     String
+  botWallet       BotWallet   @relation(fields: [botWalletId], references: [id], onDelete: Cascade)
+  type            TradeType
+  amountSol       Float
+  amountToken     Float?
+  txSignature     String?
+  status          String      @default("SUCCESS") // SUCCESS, PENDING, FAILED
+  errorMessage    String?
+  createdAt       DateTime    @default(now())
+
+  @@index([botConfigId])
+  @@index([botWalletId])
+}
+
+model AppConfig {
+  id              String   @id @default("default")
+  activeNetwork   Network  @default(DEVNET)
+  devnetRpcUrl    String   @default("https://api.devnet.solana.com")
+  mainnetRpcUrl   String   @default("https://api.mainnet-beta.solana.com")
+  updatedAt       DateTime @updatedAt
+}
+

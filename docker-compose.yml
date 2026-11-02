@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: solana_launchpad_db
+    restart: always
+    environment:
+      POSTGRES_USER: launchpad
+      POSTGRES_PASSWORD: launchpad_password
+      POSTGRES_DB: launchpad_db
+    ports:
+      - "5455:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
+    driver: local
